@@ -1,0 +1,52 @@
+import cv2
+from fer import FER
+
+# Kamera başlatma
+cap = cv2.VideoCapture(0)
+
+# FER modelini başlatma (MTCNN ile)
+detector = FER(mtcnn=True)
+
+print("Kamera açıldı, 'q' tuşuna basarak çıkabilirsiniz.")
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("Kamera görüntüsü alınamadı!")
+        break
+
+    # Görüntüyü analiz et
+    results = detector.detect_emotions(frame)
+
+    for result in results:
+        # Yüz koordinatlarını al
+        (x, y, w, h) = result["box"]
+        emotions = result["emotions"]
+
+        # Yüzün etrafına dikdörtgen çiz
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+
+        # Duyguları yazdır
+        y_offset = y - 10
+        for emotion, value in emotions.items():
+            cv2.putText(
+                frame,
+                f"{emotion}: {value:.2f}",
+                (x, y_offset),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 255, 0),
+                2,
+            )
+            y_offset -= 20  # Duyguların alt alta görünmesi için
+
+    # Görüntüyü göster
+    cv2.imshow("Duygu Analizi", frame)
+
+    # 'q' tuşuna basıldığında çık
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
+
+# Kaynakları serbest bırak
+cap.release()
+cv2.destroyAllWindows()

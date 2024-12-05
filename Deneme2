@@ -1,0 +1,91 @@
+import cv2
+import mediapipe as mp
+from fer import FER
+
+# Mediapipe için gerekli modüller
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7)
+mp_draw = mp.solutions.drawing_utils
+
+# Kamerayı başlat
+cap = cv2.VideoCapture(0)
+
+# FER duygu analizi için model
+detector = FER(mtcnn=True)
+
+print("Kamera açılıyor, 'q' tuşuna basarak çıkabilirsiniz.")
+
+while True:
+    # Kameradan görüntü al
+    ret, frame = cap.read()
+    if not ret:
+        print("Kamera görüntüsü alınamadı!")
+        break
+
+    # Görüntüyü analiz et
+    results = detector.detect_emotions(frame)
+
+    # BGR to RGB (Mediapipe RGB formatı kullanır)
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    result = hands.process(rgb_frame)
+
+    if result.multi_hand_landmarks:
+        for hand_landmarks in result.multi_hand_landmarks:
+            # Hand landmarks çizimi
+            mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+
+            # Baş parmak ve işaret parmağının koordinatlarını al
+            thumb = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+            index = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+
+            # Parmaklar arasındaki mesafeyi hesapla
+            distance = ((thumb.x - index.x) ** 2 + (thumb.y - index.y) ** 2) ** 0.5
+
+            # Zoom işlemi: Mesafeye göre yakınlaştırma ya da uzaklaştırma
+            if distance > 0.2:
+                # Zoom Out: Görüntüyü küçültme
+                zoom_factor = 0.8  # Görüntü boyutunu küçült
+            elif distance < 0.05:
+                # Zoom In: Görüntüyü büyütme
+                zoom_factor = 1.2  # Görüntü boyutunu büyüt
+            else:
+                zoom_factor = 1  # Hiçbir zoom yapılmasın
+
+            # Görüntü boyutunu değiştirme (zoom işlemi)
+            height, width = frame.shape[:2]
+            new_width = int(width * zoom_factor)
+            new_height = int(height * zoom_factor)
+
+            # Yeni boyutlarda resmi yeniden boyutlandırma
+            resized_frame = cv2.resize(frame, (new_width, new_height))
+
+            # Görüntüyü göster
+            cv2.imshow("Duygu ve El Hareketi Analizi", resized_frame)
+
+    # Yüz tanıma ve duyguları yazdırma
+    for result in results:
+        (x, y, w, h) = result["box"]
+        emotions = result["emotions"]
+
+        # Yüzün etrafına dikdörtgen çiz
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+
+        # En yüksek olasılıklı duyguyu yazdır
+        dominant_emotion = max(emotions, key=emotions.get)
+        cv2.putText(
+            frame,
+            f"{dominant_emotion}: {emotions[dominant_emotion]:.2f}",
+            (x, y - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 0),
+            2,
+        )
+
+    # 'q' tuşuna basıldığında çık
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
+
+# Kaynakları serbest bırak
+cap.release()
+cv2.destroyAllWindows()
